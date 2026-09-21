@@ -1,0 +1,30 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  profiles:
+    active: local
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:20MB}
+      max-request-size: ${MAX_REQUEST_SIZE:25MB}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:development-only-secret-change-me-1234567890}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:28800}
+  file:
+    upload-dir: ${FILE_UPLOAD_DIR:./uploads}
