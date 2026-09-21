@@ -1,37 +1,62 @@
 # 知识产权代理事务所管理系统
 
-本仓库采用前后端分离的单仓库结构。当前已建立 Spring Boot 后端骨架、MySQL 8 初始化脚本和冻结 API；业务模块仍需由 A/B/C/D 成员继续实现。
+## 1. 项目简介
 
-## 环境要求
+本项目是面向知识产权代理事务所的内部业务管理系统，采用前后端分离的单仓库结构，用于管理客户、案件、任务、进度、期限、文档、费用和团队用户。
 
-- Java 17
-- Maven 3.9+
-- MySQL 8.x
-- Node.js（前端建立后使用）
+## 2. 当前状态
 
-## 数据库
+- 后端骨架可以启动并连接已初始化的 Aiven MySQL `defaultdb`。
+- 已实现 JWT 登录、当前用户查询、本人密码修改、BCrypt 密码校验、用户/客户选择器、案件权限判断及文档上传下载。
+- 多数业务列表仍返回空分页，客户、案件、任务、进度、期限、费用和用户管理的大部分写接口仍返回 HTTP `501 Not Implemented`。
+- 工作台统计目前返回占位数据；管理员新增用户接口尚未实现。
+- 前端已完成登录、工作台及主要业务页面和案件详情七个页签。
+- 前端登录使用真实后端接口，主要业务页面暂时使用 `frontend/src/utils/mockData.js`，页面上的新增、编辑和删除大多尚未持久化。
 
-项目连接已完成初始化的 Aiven MySQL，数据库名固定为 `defaultdb`。日常启动后端时不要重复执行 `schema.sql` 或 `seed.sql`。
+## 3. 技术栈
 
-## 后端配置
+后端：Java 17、Spring Boot 3.3.5、MyBatis-Plus 3.5.7、MySQL、JJWT、BCrypt、Springdoc OpenAPI、Maven Wrapper 3.9.9。
 
-公共配置位于 `backend/src/main/resources/application.yml`，并默认启用 `local` profile。数据库私有配置放在 `application-local.yml`，该文件已被 Git 忽略；首次配置可复制 `application-local.example.yml` 后填写 Aiven 连接信息。
+前端：Vue 3、Vite 5、Vue Router 4、Element Plus、Axios、JavaScript。
 
-Aiven JDBC URL 必须使用 `defaultdb` 并保留 `sslMode=REQUIRED`。不要提交真实数据库密码、JWT 密钥或其他生产凭据，也不要在日常启动时重复执行 `schema.sql` 或 `seed.sql`。
+## 4. 目录结构
 
-## 构建与启动
+```text
+.
+├─ backend/                         Spring Boot 后端与 Maven Wrapper
+├─ frontend/                        Vue 3 前端
+│  ├─ src/api/                      接口封装
+│  ├─ src/layout/                   公共布局
+│  ├─ src/views/                    页面与案件详情页签
+│  └─ src/utils/mockData.js         临时演示数据
+├─ docs/                            PRD 和开发文档
+├─ sql/schema.sql                   数据库结构脚本
+└─ README.md
+```
 
-项目已包含 Maven Wrapper，并固定使用 Maven 3.9.9。团队成员应优先使用 Wrapper，不依赖本机安装的 Maven 版本。
+## 5. 配置与启动
 
-Windows PowerShell：
+环境要求：JDK 17、Node.js 20 LTS、npm 8 或更高版本。后端统一使用 Maven Wrapper，无需单独安装 Maven。
+
+数据库已经在 Aiven 初始化完成。不要创建数据库，也不要重复执行 `sql/schema.sql` 或测试数据脚本。
+
+首次配置后端时，复制私有配置示例：
+
+```powershell
+Copy-Item backend/src/main/resources/application-local.example.yml `
+  backend/src/main/resources/application-local.yml
+```
+
+在 `application-local.yml` 中填写 Aiven 连接信息，JDBC URL 必须连接 `defaultdb` 并保留 `sslMode=REQUIRED`。该文件已被 `.gitignore` 忽略，禁止提交真实密码。
+
+启动后端：
 
 ```powershell
 cd backend
-.\mvnw.cmd test
 .\mvnw.cmd spring-boot:run
 ```
 
-前端（另开一个终端）：
+启动前端：
 
 ```powershell
 cd frontend
@@ -39,37 +64,26 @@ npm install
 npm run dev
 ```
 
-前端开发服务器默认运行在 `http://localhost:5173`，并将 `/api` 请求代理到 `http://localhost:8080`。生产构建使用 `npm run build`。
+访问地址：
 
-macOS / Linux：
-
-```bash
-cd backend
-./mvnw test
-./mvnw spring-boot:run
-```
-
-启动后可访问：
-
-- API：`http://localhost:8080/api`
+- 前端：`http://localhost:5173`
+- 后端：`http://localhost:8080`
 - Swagger UI：`http://localhost:8080/swagger-ui.html`
-- OpenAPI JSON：`http://localhost:8080/v3/api-docs`
 
-## 演示账号
+## 6. 测试账号 / 认证说明
 
-`seed.sql` 中所有账号的密码均为 `password`：`admin`、`agent01`、`agent02`、`assistant01`、`assistant02`。这些账号仅用于课程演示，不得用于真实系统。
-
-## 接口约定
-
-- 登录：`POST /api/auth/login`。
+- 仓库不保存固定测试账号或明文密码，账号信息以当前 Aiven 数据库为准。
+- 数据库密码字段必须保存 BCrypt 哈希，不能保存明文密码。
+- 登录接口为 `POST /api/auth/login`。
 - 受保护接口使用 `Authorization: Bearer <token>`。
-- `pageNum` 从 1 开始，默认 1；`pageSize` 默认 10；selector 不分页。
-- 统一响应字段：`success/message/data`。
-- 统一分页字段：`list/total/pageNum/pageSize/pages`。
-- 9 张核心表均采用 `is_deleted` 逻辑删除，常规查询不返回已删除数据。
+- 前端将 token 和当前用户信息保存在 `sessionStorage`，收到 HTTP `401` 时会清除会话并跳转登录页。
+- 当前用户可通过 `POST /api/auth/password` 修改密码，后端会自动生成新的 BCrypt 哈希。
 
-## 当前骨架范围
+## 7. 团队开发规范
 
-登录、JWT 拦截、当前用户、用户/客户 selector、案件对象级权限和文档上传下载已建立基础实现。其余冻结接口已暴露在 Controller 中，尚未实现的写操作返回 HTTP 501，供各模块在不改变路径和响应合同的前提下继续填充。
-
-公共稳定文件包括 `pom.xml`、`application.yml`、`common/`、`config/`、JWT 相关类、`CaseAccessService`、Overview 骨架和现有数据库合同。成员开发时不要重构这些文件。
+- 后端构建和启动统一优先使用 `mvnw` / `mvnw.cmd`。
+- 开发前先确认对应后端接口是否仍返回空分页或 HTTP `501`。
+- 前端接入真实接口时逐步替换 `mockData.js`，保持现有字段名、枚举值和 API 路径不变。
+- 不得自动重建远程数据库，不得重复执行结构或测试数据脚本。
+- 不得提交 `application-local.yml`、真实密码、JWT 密钥、上传文件、`node_modules`、`dist` 或 `target`。
+- 提交前至少运行与改动相关的测试；后端使用 `.\mvnw.cmd test`，前端使用 `npm run build`。
