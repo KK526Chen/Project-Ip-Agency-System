@@ -15,8 +15,5 @@ backend/src/main/resources/application-local.yml
 Thumbs.db
 *.log
 
-docs/*
-
 code_plan/
 
-sql/
