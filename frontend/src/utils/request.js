@@ -1,26 +1,21 @@
 import axios from 'axios'
-
-const request = axios.create({
-  baseURL: '/api',
-  timeout: 15000,
-})
-
+import { ElMessage } from 'element-plus'
+const request = axios.create({ baseURL: '/api', timeout: 20000 })
 request.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
-
 request.interceptors.response.use(
-  (response) => response.data,
+  (response) => response.config.responseType === 'blob' ? response : response.data,
   (error) => {
-    if (error.response?.status === 401) {
-      sessionStorage.removeItem('token')
-      sessionStorage.removeItem('user')
-      if (window.location.pathname !== '/login') window.location.assign('/login')
-    }
+    const status = error.response?.status
+    if (status === 401) {
+      sessionStorage.removeItem('token'); sessionStorage.removeItem('user')
+      if (window.location.pathname !== '/login') window.location.assign(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+    } else if (status === 403) ElMessage.error(error.response?.data?.message || '无权执行此操作')
     return Promise.reject(error)
   },
 )
-
+export const messageOf = (error, fallback = '操作失败') => error.response?.data?.message || error.message || fallback
 export default request

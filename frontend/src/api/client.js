@@ -1,8 +1,7 @@
 import request from '../utils/request'
-
-export const getClients = (params) => request.get('/clients', { params })
-export const getClientSelector = (params) => request.get('/clients/selector', { params })
-export const getClient = (id) => request.get(`/clients/${id}`)
-export const createClient = (data) => request.post('/clients', data)
-export const updateClient = (id, data) => request.put(`/clients/${id}`, data)
-export const deleteClient = (id) => request.delete(`/clients/${id}`)
+export const getClientProfile = () => request.get('/client/profile')
+export const saveClientProfile = (data) => request.put('/client/profile', data)
+export const listContacts = (params) => request.get('/client/contacts', { params })
+export const createContact = (data) => request.post('/client/contacts', data)
+export const updateContact = (id, data) => request.put(`/client/contacts/${id}`, data)
+export const deleteContact = (id) => request.delete(`/client/contacts/${id}`)

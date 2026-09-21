@@ -1,43 +1,14 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Edit } from '@element-plus/icons-vue'
-import { cases } from '../../utils/mockData'
-import { labels, tagType } from '../../utils/enums'
-import BasicInfoTab from './components/BasicInfoTab.vue'
-import CaseMemberTab from './components/CaseMemberTab.vue'
-import CaseTaskTab from './components/CaseTaskTab.vue'
-import CaseProgressTab from './components/CaseProgressTab.vue'
-import CaseDeadlineTab from './components/CaseDeadlineTab.vue'
-import CaseDocumentTab from './components/CaseDocumentTab.vue'
-import CaseFeeTab from './components/CaseFeeTab.vue'
-
-const route = useRoute()
-const router = useRouter()
-const activeTab = ref('basic')
-const caseId = computed(() => Number(route.params.id))
-const caseInfo = computed(() => cases.find((item) => item.id === caseId.value) || cases[0])
+import { ArrowLeft } from '@element-plus/icons-vue'
+import { getCase, submitCase } from '../../api/case'
+import { session } from '../../utils/session'
+import { text, tagType, formatDate } from '../../utils/enums'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import BasicInfoTab from './components/BasicInfoTab.vue';import ProgressTab from './components/ProgressTab.vue';import DocumentTab from './components/DocumentTab.vue';import DeadlineTab from './components/DeadlineTab.vue';import BillingTab from './components/BillingTab.vue'
+const route=useRoute();const router=useRouter();const active=ref('basic');const item=ref({});const loading=ref(true);const role=session.user.role;const base=`/${role.toLowerCase()}`
+const id=computed(()=>Number(route.params.id));const load=async()=>{loading.value=true;try{item.value=(await getCase(`${base}/cases`,id.value)).data}finally{loading.value=false}}
+const submit=async()=>{await ElMessageBox.confirm('确认提交管理员审核？','提交委托');await submitCase(id.value);ElMessage.success('已提交');load()};onMounted(load)
 </script>
-
-<template>
-  <div class="page">
-    <el-button link :icon="ArrowLeft" @click="router.push('/cases')">返回案件列表</el-button>
-    <div class="detail-summary">
-      <div>
-        <span class="mono">{{ caseInfo.caseNo }}</span>
-        <h1>{{ caseInfo.caseName }}</h1>
-        <div class="summary-meta"><span>客户：{{ caseInfo.clientName }}</span><span>负责人：{{ caseInfo.principalName }}</span><span>立案日期：{{ caseInfo.startDate }}</span></div>
-      </div>
-      <div class="detail-summary-actions"><el-tag :type="tagType(caseInfo.status)" effect="plain">{{ labels.caseStatus[caseInfo.status] }}</el-tag><el-button :icon="Edit">编辑案件</el-button></div>
-    </div>
-    <el-tabs v-model="activeTab" class="detail-tabs">
-      <el-tab-pane label="基本信息" name="basic"><BasicInfoTab :case-info="caseInfo" /></el-tab-pane>
-      <el-tab-pane label="案件成员" name="members"><CaseMemberTab :case-id="caseId" /></el-tab-pane>
-      <el-tab-pane label="任务" name="tasks"><CaseTaskTab :case-id="caseId" /></el-tab-pane>
-      <el-tab-pane label="进度" name="progress"><CaseProgressTab :case-id="caseId" /></el-tab-pane>
-      <el-tab-pane label="期限" name="deadlines"><CaseDeadlineTab :case-id="caseId" /></el-tab-pane>
-      <el-tab-pane label="文档" name="documents"><CaseDocumentTab :case-id="caseId" /></el-tab-pane>
-      <el-tab-pane label="费用" name="fees"><CaseFeeTab :case-id="caseId" /></el-tab-pane>
-    </el-tabs>
-  </div>
-</template>
+<template><div v-loading="loading" class="page"><el-button link :icon="ArrowLeft" @click="router.push(`${base}/cases`)">返回案件列表</el-button><div class="detail-summary"><div><span class="mono">{{item.caseNo||'尚未立案'}}</span><h1>{{item.caseName}}</h1><div class="summary-meta"><span>类型：{{text('caseType',item.caseType)}}</span><span>阶段：{{item.currentStage||'—'}}</span><span>提交：{{formatDate(item.submitTime)}}</span></div></div><div class="detail-summary-actions"><el-tag :type="tagType(item.status)" size="large">{{text('caseStatus',item.status)}}</el-tag><el-button v-if="role==='CLIENT'&&['SUBMITTED','RETURNED'].includes(item.status)" @click="router.push(`/client/cases/${id}/edit`)">编辑资料</el-button><el-button v-if="role==='CLIENT'&&['SUBMITTED','RETURNED'].includes(item.status)" type="primary" @click="submit">提交审核</el-button></div></div><el-tabs v-if="item.id" v-model="active" class="detail-tabs"><el-tab-pane label="基本信息" name="basic"><BasicInfoTab :case-info="item" @updated="load"/></el-tab-pane><el-tab-pane label="进度时间轴" name="progress"><ProgressTab :case-id="id"/></el-tab-pane><el-tab-pane label="文件与官文" name="documents"><DocumentTab :case-id="id"/></el-tab-pane><el-tab-pane label="时限任务" name="deadlines"><DeadlineTab :case-id="id"/></el-tab-pane><el-tab-pane v-if="role!=='AGENT'" label="账单费用" name="billing"><BillingTab :case-id="id"/></el-tab-pane></el-tabs></div></template>

@@ -1,23 +1,8 @@
 <script setup>
-import { labels } from '../../../utils/enums'
-
-defineProps({ caseInfo: { type: Object, required: true } })
+import { onMounted, ref } from 'vue'
+import { caseChildren } from '../../../api/case'
+import { formatDate, text } from '../../../utils/enums'
+const props=defineProps({caseInfo:Object});const parties=ref([]);const priorities=ref([]);const reviews=ref([])
+onMounted(async()=>{const id=props.caseInfo.id;const [p,r,v]=await Promise.all([caseChildren(id,'parties',{pageSize:100}),caseChildren(id,'priorities',{pageSize:100}),caseChildren(id,'reviews',{pageSize:100})]);parties.value=p.data.list;priorities.value=r.data.list;reviews.value=v.data.list})
 </script>
-
-<template>
-  <section class="tab-panel">
-    <dl class="description-grid">
-      <div class="description-item"><dt>案件编号</dt><dd class="mono">{{ caseInfo.caseNo }}</dd></div>
-      <div class="description-item"><dt>申请号</dt><dd>{{ caseInfo.applicationNo || '-' }}</dd></div>
-      <div class="description-item"><dt>客户</dt><dd>{{ caseInfo.clientName }}</dd></div>
-      <div class="description-item"><dt>案件类型</dt><dd>{{ labels.caseType[caseInfo.caseType] }}</dd></div>
-      <div class="description-item"><dt>业务类型</dt><dd>{{ caseInfo.businessType }}</dd></div>
-      <div class="description-item"><dt>负责人</dt><dd>{{ caseInfo.principalName }}</dd></div>
-      <div class="description-item"><dt>优先级</dt><dd>{{ labels.priority[caseInfo.priority] }}</dd></div>
-      <div class="description-item"><dt>立案日期</dt><dd>{{ caseInfo.startDate }}</dd></div>
-      <div class="description-item"><dt>结案日期</dt><dd>{{ caseInfo.closeDate || '-' }}</dd></div>
-      <div class="description-item"><dt>最后更新</dt><dd>{{ caseInfo.updateTime }}</dd></div>
-      <div class="description-item description-wide"><dt>案件说明</dt><dd>{{ caseInfo.description || '-' }}</dd></div>
-    </dl>
-  </section>
-</template>
+<template><section class="tab-panel"><dl class="description-grid"><div class="description-item"><dt>案件名称</dt><dd>{{caseInfo.caseName}}</dd></div><div class="description-item"><dt>案件类型</dt><dd>{{text('caseType',caseInfo.caseType)}}</dd></div><div class="description-item"><dt>技术领域</dt><dd>{{caseInfo.technicalField||'—'}}</dd></div><div class="description-item"><dt>申请号</dt><dd>{{caseInfo.applicationNo||'—'}}</dd></div><div class="description-item"><dt>优先级</dt><dd>{{text('priority',caseInfo.priorityLevel)}}</dd></div><div class="description-item"><dt>受理时间</dt><dd>{{formatDate(caseInfo.acceptTime)}}</dd></div><div class="description-item description-wide"><dt>案件说明</dt><dd>{{caseInfo.description||'—'}}</dd></div></dl><div class="split-panels"><div><h3>当事人</h3><el-table :data="parties" size="small"><el-table-column label="类型"><template #default="{row}">{{text('partyType',row.partyType)}}</template></el-table-column><el-table-column prop="name" label="名称"/><el-table-column prop="nationality" label="国籍"/></el-table></div><div><h3>优先权</h3><el-table :data="priorities" size="small"><el-table-column prop="country" label="国家"/><el-table-column prop="priorityNo" label="优先权号"/><el-table-column prop="priorityDate" label="日期"/></el-table></div></div><h3>审核历史</h3><el-table :data="reviews" size="small"><el-table-column prop="reviewType" label="审核类型"/><el-table-column prop="reviewResult" label="结果"/><el-table-column prop="reviewComment" label="意见"/><el-table-column label="时间"><template #default="{row}">{{formatDate(row.reviewTime)}}</template></el-table-column></el-table></section></template>

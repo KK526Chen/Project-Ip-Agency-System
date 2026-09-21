@@ -1,48 +1,17 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Key, User } from '@element-plus/icons-vue'
-import { labels } from '../../utils/enums'
-
-const stored = JSON.parse(sessionStorage.getItem('user') || '{}')
-const profile = reactive({ username: stored.username || 'admin', realName: stored.realName || '系统管理员', role: stored.role || 'ADMIN', phone: stored.phone || '138****0001', email: stored.email || 'admin@example.com' })
-const passwordDialog = ref(false)
-const password = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
-const saveProfile = () => ElMessage.success('个人信息已保存')
-const savePassword = () => {
-  if (!password.oldPassword || !password.newPassword) return ElMessage.warning('请完整填写密码')
-  if (password.newPassword !== password.confirmPassword) return ElMessage.warning('两次新密码不一致')
-  ElMessage.success('密码已更新')
-  passwordDialog.value = false
-}
+import { changePassword, getProfile } from '../../api/auth'
+import { getClientProfile, saveClientProfile } from '../../api/client'
+import { getAgentProfile, saveAgentProfile } from '../../api/profile'
+import { options, text } from '../../utils/enums'
+import { messageOf } from '../../utils/request'
+import { session } from '../../utils/session'
+import PageHeader from '../../components/PageHeader.vue'
+const role=session.user.role;const form=reactive({});const account=ref({});const saving=ref(false);const passwordOpen=ref(false);const password=reactive({oldPassword:'',newPassword:''})
+onMounted(async()=>{const [a,p]=await Promise.all([getProfile(),role==='CLIENT'?getClientProfile():role==='AGENT'?getAgentProfile():Promise.resolve({data:{}})]);account.value=a.data;Object.assign(form,p.data)})
+const profileFields={CLIENT:['clientType','clientName','creditOrIdNo','industry','registeredAddress','contactAddress','primaryContactName','primaryContactPhone','primaryContactEmail','technicalPreference','invoiceTitle','taxpayerNo','bankName','bankAccount'],AGENT:['licenseNo','department','practiceYears','professionalField','ipcScope','education','profile']}
+const save=async()=>{saving.value=true;try{const payload=Object.fromEntries((profileFields[role]||[]).map(key=>[key,form[key]??null]));if(role==='CLIENT')await saveClientProfile(payload);else if(role==='AGENT')await saveAgentProfile(payload);ElMessage.success('资料已保存')}catch(e){ElMessage.error(messageOf(e))}finally{saving.value=false}}
+const savePassword=async()=>{try{await changePassword(password);passwordOpen.value=false;Object.assign(password,{oldPassword:'',newPassword:''});ElMessage.success('密码已修改')}catch(e){ElMessage.error(messageOf(e))}}
 </script>
-
-<template>
-  <div class="page profile-page">
-    <div class="page-heading"><div><h1>个人信息</h1><p>查看账号身份并维护联系信息</p></div></div>
-    <div class="profile-layout">
-      <aside class="profile-aside">
-        <div class="profile-avatar">{{ profile.realName.slice(0, 1) }}</div>
-        <strong>{{ profile.realName }}</strong>
-        <span>@{{ profile.username }}</span>
-        <el-tag effect="plain">{{ labels.role[profile.role] }}</el-tag>
-      </aside>
-      <section class="profile-form-panel">
-        <div class="section-title"><h2><el-icon><User /></el-icon> 基本资料</h2><el-button type="primary" @click="saveProfile">保存修改</el-button></div>
-        <el-form :model="profile" label-position="top" class="profile-form"><el-row :gutter="18">
-          <el-col :xs="24" :sm="12"><el-form-item label="用户名"><el-input v-model="profile.username" disabled /></el-form-item></el-col>
-          <el-col :xs="24" :sm="12"><el-form-item label="角色"><el-input :model-value="labels.role[profile.role]" disabled /></el-form-item></el-col>
-          <el-col :xs="24" :sm="12"><el-form-item label="姓名"><el-input v-model="profile.realName" /></el-form-item></el-col>
-          <el-col :xs="24" :sm="12"><el-form-item label="手机号"><el-input v-model="profile.phone" /></el-form-item></el-col>
-          <el-col :xs="24" :sm="12"><el-form-item label="邮箱"><el-input v-model="profile.email" /></el-form-item></el-col>
-        </el-row></el-form>
-        <div class="security-row"><div><strong>登录密码</strong><span>建议定期更新密码，保障账号安全</span></div><el-button :icon="Key" @click="passwordDialog = true">修改密码</el-button></div>
-      </section>
-    </div>
-    <el-dialog v-model="passwordDialog" title="修改密码" width="min(460px, 94vw)"><el-form :model="password" label-position="top">
-      <el-form-item label="当前密码"><el-input v-model="password.oldPassword" type="password" show-password /></el-form-item>
-      <el-form-item label="新密码"><el-input v-model="password.newPassword" type="password" show-password /></el-form-item>
-      <el-form-item label="确认新密码"><el-input v-model="password.confirmPassword" type="password" show-password /></el-form-item>
-    </el-form><template #footer><el-button @click="passwordDialog = false">取消</el-button><el-button type="primary" @click="savePassword">确认修改</el-button></template></el-dialog>
-  </div>
-</template>
+<template><div class="page"><PageHeader :title="role==='CLIENT'?'客户资料':'个人资料'" description="维护联系信息与业务资料"><el-button @click="passwordOpen=true">修改密码</el-button><el-button v-if="role!=='ADMIN'" type="primary" :loading="saving" @click="save">保存资料</el-button></PageHeader><div class="profile-layout"><aside class="profile-aside surface"><span class="profile-avatar">{{account.realName?.slice(0,1)}}</span><h2>{{account.realName}}</h2><span>@{{account.username}}</span><el-tag>{{text('role',account.role)}}</el-tag><span>{{account.phone||'未填写电话'}}</span><span>{{account.email||'未填写邮箱'}}</span></aside><section class="profile-form-panel surface"><div class="section-title"><h2>详细资料</h2></div><el-form v-if="role==='CLIENT'" class="profile-form form-grid" :model="form" label-position="top"><el-form-item label="客户类型"><el-select v-model="form.clientType"><el-option v-for="o in options('clientType')" :key="o.value" v-bind="o"/></el-select></el-form-item><el-form-item label="客户名称"><el-input v-model="form.clientName"/></el-form-item><el-form-item label="证件/信用代码"><el-input v-model="form.creditOrIdNo"/></el-form-item><el-form-item label="行业"><el-input v-model="form.industry"/></el-form-item><el-form-item label="注册地址"><el-input v-model="form.registeredAddress"/></el-form-item><el-form-item label="通讯地址"><el-input v-model="form.contactAddress"/></el-form-item><el-form-item label="主联系人"><el-input v-model="form.primaryContactName"/></el-form-item><el-form-item label="联系电话"><el-input v-model="form.primaryContactPhone"/></el-form-item><el-form-item label="联系邮箱"><el-input v-model="form.primaryContactEmail"/></el-form-item><el-form-item label="技术领域偏好"><el-input v-model="form.technicalPreference"/></el-form-item><el-form-item label="发票抬头"><el-input v-model="form.invoiceTitle"/></el-form-item><el-form-item label="纳税人识别号"><el-input v-model="form.taxpayerNo"/></el-form-item><el-form-item label="开户行"><el-input v-model="form.bankName"/></el-form-item><el-form-item label="银行账号"><el-input v-model="form.bankAccount"/></el-form-item></el-form><el-form v-else-if="role==='AGENT'" class="profile-form form-grid" :model="form" label-position="top"><el-form-item label="工号"><el-input v-model="form.employeeNo" disabled/></el-form-item><el-form-item label="执业证号"><el-input v-model="form.licenseNo"/></el-form-item><el-form-item label="部门"><el-select v-model="form.department"><el-option v-for="v in ['PATENT','TRADEMARK','COPYRIGHT','LITIGATION','PROCESS']" :key="v" :value="v"/></el-select></el-form-item><el-form-item label="执业年限"><el-input-number v-model="form.practiceYears" :min="0"/></el-form-item><el-form-item label="专业领域"><el-input v-model="form.professionalField"/></el-form-item><el-form-item label="IPC 范围"><el-input v-model="form.ipcScope"/></el-form-item><el-form-item label="教育背景"><el-input v-model="form.education"/></el-form-item><el-form-item class="span-2" label="个人简介"><el-input v-model="form.profile" type="textarea" :rows="4"/></el-form-item></el-form><el-empty v-else description="管理员账户资料由用户管理维护"/></section></div><el-dialog v-model="passwordOpen" title="修改密码" width="min(440px,92vw)"><el-form :model="password" label-position="top"><el-form-item label="原密码"><el-input v-model="password.oldPassword" type="password" show-password/></el-form-item><el-form-item label="新密码"><el-input v-model="password.newPassword" type="password" show-password/></el-form-item></el-form><template #footer><el-button @click="passwordOpen=false">取消</el-button><el-button type="primary" @click="savePassword">确认修改</el-button></template></el-dialog></div></template>
