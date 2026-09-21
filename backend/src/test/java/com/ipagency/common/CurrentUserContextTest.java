@@ -13,7 +13,7 @@ class CurrentUserContextTest {
 
     @Test
     void storesAndClearsCurrentUser() {
-        CurrentUserContext.set(new AuthenticatedUser(7L, "ASSISTANT"));
+        CurrentUserContext.set(new AuthenticatedUser(7L, "CLIENT"));
         assertThat(CurrentUserContext.require().userId()).isEqualTo(7L);
         CurrentUserContext.clear();
         assertThatThrownBy(CurrentUserContext::require).isInstanceOf(BusinessException.class);

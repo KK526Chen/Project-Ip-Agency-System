@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @MapperScan("com.ipagency.mapper")
 @SpringBootApplication
+@org.springframework.scheduling.annotation.EnableScheduling
 public class IpAgencyApplication {
     public static void main(String[] args) {
         SpringApplication.run(IpAgencyApplication.class, args);

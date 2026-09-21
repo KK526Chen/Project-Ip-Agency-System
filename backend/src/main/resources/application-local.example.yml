@@ -4,3 +4,8 @@ spring:
     username: YOUR_USERNAME
     password: YOUR_PASSWORD
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+# Optional for a different LAN address or frontend port.
+# app:
+#   cors:
+#     allowed-origin-patterns: http://localhost:5173,http://192.168.*:5173

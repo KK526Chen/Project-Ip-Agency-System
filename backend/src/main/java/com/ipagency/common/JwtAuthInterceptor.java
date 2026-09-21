@@ -12,14 +12,17 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class JwtAuthInterceptor implements HandlerInterceptor {
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final com.ipagency.mapper.SysUserMapper users;
 
-    public JwtAuthInterceptor(JwtUtil jwtUtil, ObjectMapper objectMapper) {
+    public JwtAuthInterceptor(JwtUtil jwtUtil, ObjectMapper objectMapper, com.ipagency.mapper.SysUserMapper users) {
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
+        this.users = users;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        CurrentUserContext.clear();
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
@@ -29,7 +32,20 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             return false;
         }
         try {
-            CurrentUserContext.set(jwtUtil.parse(authorization.substring(7)));
+            var identity = jwtUtil.parse(authorization.substring(7));
+            var user = users.selectById(identity.userId());
+            if (user == null || !Integer.valueOf(1).equals(user.getStatus()) || !user.getRole().equals(identity.role())) throw new IllegalArgumentException("Inactive identity");
+            CurrentUserContext.set(identity);
+            String path = request.getRequestURI();
+            String required = path.startsWith("/api/admin/") ? "ADMIN" : path.startsWith("/api/client/") ? "CLIENT" : path.startsWith("/api/agent/") ? "AGENT" : null;
+            if (required != null && !required.equals(identity.role())) {
+                CurrentUserContext.clear();
+                response.setStatus(403);
+                response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                objectMapper.writeValue(response.getWriter(), ApiResponse.error("角色权限不足"));
+                return false;
+            }
             return true;
         } catch (Exception exception) {
             CurrentUserContext.clear();

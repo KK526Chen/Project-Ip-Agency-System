@@ -31,4 +31,18 @@ public class GlobalExceptionHandler {
         LOGGER.error("Unhandled server error", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("服务器内部错误"));
     }
+
+    @ExceptionHandler({org.springframework.http.converter.HttpMessageNotReadableException.class,
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+        org.springframework.web.bind.MissingServletRequestParameterException.class,
+        org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+        org.springframework.web.multipart.MaxUploadSizeExceededException.class})
+    public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error("请求参数格式不正确或文件超过大小限制"));
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraint(Exception exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("数据重复或不满足关联、字段约束"));
+    }
 }

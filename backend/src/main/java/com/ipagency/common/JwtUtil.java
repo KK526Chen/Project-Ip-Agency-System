@@ -22,9 +22,15 @@ public class JwtUtil {
     }
 
     public String generate(Long userId, String role) {
+        return generate(userId, userId.toString(), role);
+    }
+
+    public String generate(Long userId, String username, String role) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
+                .claim("userId", userId)
+                .claim("username", username)
                 .claim("role", role)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(expirationSeconds)))
@@ -34,6 +40,8 @@ public class JwtUtil {
 
     public AuthenticatedUser parse(String token) {
         Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
-        return new AuthenticatedUser(Long.valueOf(claims.getSubject()), claims.get("role", String.class));
+        String role = claims.get("role", String.class);
+        if (!java.util.Set.of("CLIENT", "AGENT", "ADMIN").contains(role)) throw new IllegalArgumentException("Invalid role");
+        return new AuthenticatedUser(Long.valueOf(claims.getSubject()), role);
     }
 }
