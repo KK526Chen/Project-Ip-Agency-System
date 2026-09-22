@@ -31,7 +31,13 @@ public class DeadlineReminderService {
             LinkedHashSet<Long> recipients = new LinkedHashSet<>();
             recipients.add(db.get(ClientProfile.class, c.getClientId()).getUserId());
             if (task.getAgentId() != null) recipients.add(db.get(AgentProfile.class, task.getAgentId()).getUserId());
-            if (task.getOfficialDeadline().isBefore(LocalDateTime.now())) { task.setStatus("OVERDUE"); db.update(task); }
+            if (task.getOfficialDeadline().isBefore(LocalDateTime.now())) {
+                task.setStatus("OVERDUE"); db.update(task);
+                try {
+                    RiskRecord r = new RiskRecord(); r.setCaseId(task.getCaseId()); r.setRiskType("DEADLINE"); r.setLevelCode("HIGH");
+                    r.setTitle("时限逾期: " + task.getTaskName()); r.setStatus("OPEN"); r.setRelatedId(task.getId()); db.insert(r);
+                } catch (Exception ignored) { }
+            }
             for (Long userId : recipients) events.notifyUser(userId, "DEADLINE", "时限提醒: " + task.getTaskName(), "DEADLINE_REMINDER", task.getId());
         }
     }
