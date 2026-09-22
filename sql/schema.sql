@@ -986,8 +986,493 @@ VALUES
  '课程项目中使用Mock Adapter；真实接入取决于官方接口授权');
 
 -- =========================================================
--- 10. 完成
+-- 10. Fork C V3 扩展表（与 sql/migration_c_r2.sql 保持一致）
 -- =========================================================
+-- 已初始化的 V2 库请单独执行 sql/migration_c_r2.sql
 
--- 查看新表
-SHOW TABLES;
+CREATE TABLE IF NOT EXISTS agent_skill (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    agent_id BIGINT UNSIGNED NOT NULL,
+    skill_type VARCHAR(40) NULL,
+    skill_code VARCHAR(80) NULL,
+    proficiency VARCHAR(40) NULL,
+    valid_from DATE NULL,
+    valid_to DATE NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_agent_skill_agent (agent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS work_item (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    stage_id BIGINT UNSIGNED NULL,
+    deadline_id BIGINT UNSIGNED NULL,
+    parent_id BIGINT UNSIGNED NULL,
+    work_type VARCHAR(40) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT NULL,
+    assignee_agent_id BIGINT UNSIGNED NULL,
+    creator_user_id BIGINT UNSIGNED NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'TODO',
+    priority VARCHAR(20) NULL DEFAULT 'MEDIUM',
+    start_time DATETIME NULL,
+    due_time DATETIME NULL,
+    completed_time DATETIME NULL,
+    estimated_hours DECIMAL(10,2) NULL,
+    actual_hours DECIMAL(10,2) NULL,
+    transfer_policy VARCHAR(30) NULL DEFAULT 'FOLLOW_PRINCIPAL',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_work_item_case_status (case_id, status),
+    KEY idx_work_item_assignee (assignee_agent_id, status, due_time),
+    KEY idx_work_item_deadline (deadline_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS work_dependency (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    predecessor_id BIGINT UNSIGNED NOT NULL,
+    successor_id BIGINT UNSIGNED NOT NULL,
+    dependency_type VARCHAR(30) NOT NULL DEFAULT 'FINISH_TO_START',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_work_dep_pred (predecessor_id),
+    KEY idx_work_dep_succ (successor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS timesheet (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    work_item_id BIGINT UNSIGNED NOT NULL,
+    case_id BIGINT UNSIGNED NOT NULL,
+    agent_id BIGINT UNSIGNED NOT NULL,
+    work_date DATE NOT NULL,
+    hours DECIMAL(10,2) NOT NULL,
+    description VARCHAR(500) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_timesheet_item (work_item_id),
+    KEY idx_timesheet_agent_date (agent_id, work_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS document_series (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    document_type VARCHAR(40) NOT NULL,
+    logical_name VARCHAR(300) NULL,
+    current_version_id BIGINT UNSIGNED NULL,
+    approved_version_id BIGINT UNSIGNED NULL,
+    status VARCHAR(30) NULL DEFAULT 'ACTIVE',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_doc_series_case (case_id, document_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS document_version (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    series_id BIGINT UNSIGNED NOT NULL,
+    document_id BIGINT UNSIGNED NOT NULL,
+    version_no INT NOT NULL,
+    parent_document_id BIGINT UNSIGNED NULL,
+    file_hash VARCHAR(128) NULL,
+    version_status VARCHAR(30) NULL DEFAULT 'CURRENT',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_doc_version (series_id, version_no),
+    KEY idx_doc_version_doc (document_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS change_request (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    series_id BIGINT UNSIGNED NOT NULL,
+    source_version_id BIGINT UNSIGNED NOT NULL,
+    new_document_id BIGINT UNSIGNED NULL,
+    requester_user_id BIGINT UNSIGNED NOT NULL,
+    approver_user_id BIGINT UNSIGNED NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    reason VARCHAR(1000) NULL,
+    impact VARCHAR(1000) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workflow_definition (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(80) NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    business_type VARCHAR(40) NULL,
+    status TINYINT NOT NULL DEFAULT 1,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_wf_def_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workflow_version (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    definition_id BIGINT UNSIGNED NOT NULL,
+    version_no INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    published_at DATETIME NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_wf_ver (definition_id, version_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workflow_state (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    version_id BIGINT UNSIGNED NOT NULL,
+    state_code VARCHAR(80) NOT NULL,
+    state_name VARCHAR(200) NULL,
+    is_initial TINYINT NOT NULL DEFAULT 0,
+    is_final TINYINT NOT NULL DEFAULT 0,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_wf_state_ver (version_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workflow_transition (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    version_id BIGINT UNSIGNED NOT NULL,
+    from_state VARCHAR(80) NOT NULL,
+    event_code VARCHAR(80) NOT NULL,
+    to_state VARCHAR(80) NOT NULL,
+    allowed_role VARCHAR(40) NULL,
+    guard_rule VARCHAR(80) NULL,
+    actions VARCHAR(500) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_wf_trans_ver (version_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workflow_instance (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    definition_id BIGINT UNSIGNED NOT NULL,
+    version_id BIGINT UNSIGNED NOT NULL,
+    current_state VARCHAR(80) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_wf_inst_case (case_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workflow_history (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    instance_id BIGINT UNSIGNED NOT NULL,
+    case_id BIGINT UNSIGNED NOT NULL,
+    from_state VARCHAR(80) NULL,
+    to_state VARCHAR(80) NULL,
+    event_code VARCHAR(80) NULL,
+    operator_user_id BIGINT UNSIGNED NULL,
+    reason VARCHAR(500) NULL,
+    occurred_at DATETIME NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_wf_hist_inst (instance_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS checklist_template (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(80) NOT NULL,
+    name VARCHAR(200) NULL,
+    gate_code VARCHAR(80) NULL,
+    items_json TEXT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_chk_tpl (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS checklist_instance (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    template_id BIGINT UNSIGNED NOT NULL,
+    gate_code VARCHAR(80) NULL,
+    status VARCHAR(20) NULL DEFAULT 'OPEN',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_chk_inst_case (case_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS checklist_item (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    instance_id BIGINT UNSIGNED NOT NULL,
+    item_label VARCHAR(200) NOT NULL,
+    required_flag TINYINT NOT NULL DEFAULT 1,
+    checked_flag TINYINT NOT NULL DEFAULT 0,
+    missing_message VARCHAR(300) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_chk_item_inst (instance_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dynamic_form_definition (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(80) NOT NULL,
+    name VARCHAR(200) NULL,
+    case_type VARCHAR(40) NULL,
+    version_no INT NULL DEFAULT 1,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dynamic_form_field (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    definition_id BIGINT UNSIGNED NOT NULL,
+    field_key VARCHAR(80) NOT NULL,
+    label VARCHAR(200) NULL,
+    field_type VARCHAR(30) NULL,
+    required_flag TINYINT NULL DEFAULT 0,
+    options_json TEXT NULL,
+    validation VARCHAR(200) NULL,
+    visible_condition VARCHAR(200) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dynamic_form_instance (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    definition_id BIGINT UNSIGNED NOT NULL,
+    form_version INT NULL,
+    json_value TEXT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ocr_job (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    document_id BIGINT UNSIGNED NOT NULL,
+    case_id BIGINT UNSIGNED NOT NULL,
+    engine VARCHAR(50) NULL DEFAULT 'MOCK',
+    engine_version VARCHAR(50) NULL DEFAULT 'v1',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    started_at DATETIME NULL,
+    finished_at DATETIME NULL,
+    raw_text TEXT NULL,
+    error_message VARCHAR(1000) NULL,
+    retry_count INT NOT NULL DEFAULT 0,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_ocr_job_doc (document_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ocr_extracted_field (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    job_id BIGINT UNSIGNED NOT NULL,
+    field_name VARCHAR(80) NOT NULL,
+    raw_value VARCHAR(500) NULL,
+    parsed_value VARCHAR(500) NULL,
+    confidence DECIMAL(5,4) NULL,
+    confirmed_value VARCHAR(500) NULL,
+    confirmed_by BIGINT UNSIGNED NULL,
+    confirmed_at DATETIME NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_ocr_field_job (job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ocr_correction (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    field_id BIGINT UNSIGNED NOT NULL,
+    old_value VARCHAR(500) NULL,
+    new_value VARCHAR(500) NULL,
+    operator_user_id BIGINT UNSIGNED NULL,
+    reason VARCHAR(500) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS business_calendar (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(80) NOT NULL,
+    name VARCHAR(200) NULL,
+    status TINYINT NOT NULL DEFAULT 1,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_cal_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS calendar_day (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    calendar_id BIGINT UNSIGNED NOT NULL,
+    day_date DATE NOT NULL,
+    is_workday TINYINT NOT NULL DEFAULT 1,
+    holiday_name VARCHAR(100) NULL,
+    override_type VARCHAR(30) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_cal_day (calendar_id, day_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS deadline_rule (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    rule_code VARCHAR(80) NOT NULL,
+    business_type VARCHAR(40) NULL,
+    trigger_event VARCHAR(80) NULL,
+    base_days INT NULL,
+    day_type VARCHAR(20) NULL DEFAULT 'CALENDAR',
+    adjustment_policy VARCHAR(40) NULL,
+    internal_offset_days INT NULL,
+    effective_from DATE NULL,
+    effective_to DATE NULL,
+    version_no INT NULL DEFAULT 1,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_dl_rule (rule_code, version_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS deadline_history (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    deadline_id BIGINT UNSIGNED NOT NULL,
+    change_type VARCHAR(40) NULL,
+    old_value DATETIME NULL,
+    new_value DATETIME NULL,
+    operator_user_id BIGINT UNSIGNED NULL,
+    reason VARCHAR(500) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_dl_hist (deadline_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS deadline_adjustment (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    deadline_id BIGINT UNSIGNED NOT NULL,
+    old_value DATETIME NULL,
+    new_value DATETIME NULL,
+    operator_user_id BIGINT UNSIGNED NULL,
+    reason VARCHAR(500) NULL,
+    attachment VARCHAR(500) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_dl_adj (deadline_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS deadline_reminder_log (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    deadline_id BIGINT UNSIGNED NOT NULL,
+    node_code VARCHAR(20) NULL,
+    remind_date DATE NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_dl_remind (deadline_id, remind_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS risk_record (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    risk_type VARCHAR(40) NULL,
+    level_code VARCHAR(20) NULL,
+    title VARCHAR(200) NULL,
+    description VARCHAR(1000) NULL,
+    status VARCHAR(20) NULL DEFAULT 'OPEN',
+    related_id BIGINT UNSIGNED NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_risk_case (case_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS exception_case (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    case_id BIGINT UNSIGNED NOT NULL,
+    exception_type VARCHAR(60) NULL,
+    title VARCHAR(200) NULL,
+    detail VARCHAR(1000) NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+    related_id BIGINT UNSIGNED NULL,
+    assignee_user_id BIGINT UNSIGNED NULL,
+    resolution_note VARCHAR(1000) NULL,
+    resolved_by BIGINT UNSIGNED NULL,
+    resolved_at DATETIME NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_exc_case (case_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS data_quality_issue (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    issue_code VARCHAR(80) NULL,
+    case_id BIGINT UNSIGNED NULL,
+    detail VARCHAR(1000) NULL,
+    status VARCHAR(20) NULL DEFAULT 'OPEN',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO workflow_definition (id, code, name, business_type, status)
+VALUES (1, 'INVENTION_PATENT', '发明专利办案流程', 'INVENTION_PATENT', 1);
+INSERT IGNORE INTO workflow_version (id, definition_id, version_no, status, published_at)
+VALUES (1, 1, 1, 'PUBLISHED', NOW());
+INSERT IGNORE INTO workflow_state (id, version_id, state_code, state_name, is_initial, is_final) VALUES
+(1,1,'PROCESSING','办理中',1,0),(2,1,'FORMAL_EXAM','形式审查',0,0),(3,1,'GRANTED','已授权',0,0),(4,1,'CLOSED','已结案',0,1);
+INSERT IGNORE INTO workflow_transition (id, version_id, from_state, event_code, to_state, allowed_role, guard_rule) VALUES
+(1,1,'PROCESSING','START_FORMAL','FORMAL_EXAM','AGENT',NULL),
+(2,1,'FORMAL_EXAM','FILE_APPLICATION','GRANTED','AGENT','SUBMIT_GATE'),
+(3,1,'GRANTED','CLOSE','CLOSED','ADMIN',NULL);
+
+INSERT IGNORE INTO checklist_template (id, code, name, gate_code, items_json) VALUES
+(1,'SUBMIT_GATE','正式提交 Gate','SUBMIT_GATE','["APPLICATION document approved","required fields complete"]');
+
+INSERT IGNORE INTO business_calendar (id, code, name, status) VALUES (1,'CN_WORKDAY','中国工作日日历',1);
+INSERT IGNORE INTO deadline_rule (id, rule_code, business_type, trigger_event, base_days, day_type, internal_offset_days, version_no)
+VALUES (1,'OA_RESPONSE_RULE_V1','PATENT','OCR_CONFIRMED',30,'CALENDAR',3,1);
