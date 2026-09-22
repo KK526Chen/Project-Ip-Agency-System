@@ -12,6 +12,10 @@ public final class CurrentUserContext {
         CURRENT.set(user);
     }
 
+    public static AuthenticatedUser current() {
+        return CURRENT.get();
+    }
+
     public static AuthenticatedUser require() {
         AuthenticatedUser user = CURRENT.get();
         if (user == null) {
