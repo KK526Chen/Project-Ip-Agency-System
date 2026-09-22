@@ -34,9 +34,16 @@ public class ProfileService {
     }
     @Transactional
     public AgentProfile saveAgent(Map<String, Object> body) {
+        role("AGENT");
+        if (body.containsKey("agentId") || body.containsKey("id") || body.containsKey("userId") || body.containsKey("employeeNo"))
+            throw new BusinessException("不允许修改字段: id/userId/employeeNo/agentId");
         AgentProfile p = access.agent();
+        String employeeNo = p.getEmployeeNo(); Long userId = p.getUserId(); Long id = p.getId();
         input.apply(body, p, "licenseNo department professionalField practiceYears education ipcScope profile");
-        db.update(p); events.audit("UPDATE_PROFILE", "AGENT", p.getId()); return p;
+        p.setId(id); p.setUserId(userId); p.setEmployeeNo(employeeNo);
+        db.update(p);
+        events.audit("UPDATE_PROFILE", "AGENT", p.getId());
+        return db.get(AgentProfile.class, p.getId());
     }
     public PageResult<ClientContact> contacts(long page, long size) {
         return db.page(ClientContact.class, new QueryWrapper<ClientContact>().eq("client_id", access.client().getId()).orderByDesc("id"), page, size);
