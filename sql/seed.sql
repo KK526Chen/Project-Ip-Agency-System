@@ -356,7 +356,13 @@ SELECT 'case_document', COUNT(*) FROM case_document
 UNION ALL
 SELECT 'deadline_task', COUNT(*) FROM deadline_task
 UNION ALL
+SELECT 'review_record', COUNT(*) FROM review_record
+UNION ALL
 SELECT 'fee_bill', COUNT(*) FROM fee_bill
+UNION ALL
+SELECT 'payment_record', COUNT(*) FROM payment_record
+UNION ALL
+SELECT 'invoice_record', COUNT(*) FROM invoice_record
 UNION ALL
 SELECT 'notification', COUNT(*) FROM notification;
 

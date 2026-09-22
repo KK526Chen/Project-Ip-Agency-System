@@ -73,4 +73,11 @@ public class BillingService {
         if (!CurrentUserContext.require().isAdmin()) q.inSql("bill_id", "SELECT id FROM fee_bill WHERE is_deleted = 0 AND client_id = " + access.client().getId());
         return db.page(InvoiceRecord.class, q, page, size);
     }
+    public PageResult<PaymentRecord> payments(long page, long size, Long billId) {
+        role("CLIENT", "ADMIN");
+        if (billId != null && !CurrentUserContext.require().isAdmin()) owned(billId);
+        var q = new QueryWrapper<PaymentRecord>().eq(billId != null, "bill_id", billId).orderByDesc("payment_time", "id");
+        if (!CurrentUserContext.require().isAdmin()) q.inSql("bill_id", "SELECT id FROM fee_bill WHERE is_deleted = 0 AND client_id = " + access.client().getId());
+        return db.page(PaymentRecord.class, q, page, size);
+    }
 }

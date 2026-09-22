@@ -54,4 +54,11 @@ public class BillingController {
             @RequestParam(defaultValue="10") long pageSize) {
         return ApiResponse.success(bills.invoices(pageNum,pageSize));
     }
+
+    @GetMapping({"/client/payments", "/admin/payments"})
+    public ApiResponse<?> payments(@RequestParam(defaultValue="1") long pageNum,
+            @RequestParam(defaultValue="10") long pageSize,
+            @RequestParam(required=false) Long billId) {
+        return ApiResponse.success(bills.payments(pageNum,pageSize,billId));
+    }
 }
