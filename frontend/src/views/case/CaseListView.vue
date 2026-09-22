@@ -5,9 +5,10 @@ import { listCases, submitCase } from '../../api/case'
 import { session } from '../../utils/session'
 import { options, text, tagType, formatDate } from '../../utils/enums'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { messageOf } from '../../utils/request'
 import PageHeader from '../../components/PageHeader.vue';import AppPagination from '../../components/AppPagination.vue'
 const router=useRouter();const role=session.user.role;const base=`/${role.toLowerCase()}`;const state=reactive({list:[],total:0,pageNum:1,pageSize:10,keyword:'',status:'',caseType:'',loading:false})
-const load=async()=>{state.loading=true;try{const r=await listCases(`${base}/cases`,{pageNum:state.pageNum,pageSize:state.pageSize,keyword:state.keyword||undefined,status:state.status||undefined,caseType:state.caseType||undefined});state.list=r.data.list;state.total=r.data.total}finally{state.loading=false}}
+const load=async()=>{state.loading=true;try{const r=await listCases(`${base}/cases`,{pageNum:state.pageNum,pageSize:state.pageSize,keyword:state.keyword||undefined,status:state.status||undefined,caseType:state.caseType||undefined});state.list=r.data?.list||[];state.total=r.data?.total||0}catch(e){state.list=[];state.total=0;ElMessage.error(messageOf(e,'无法加载案件列表，请刷新重试'))}finally{state.loading=false}}
 const submit=async(row)=>{await ElMessageBox.confirm('提交后进入管理员审核，确认继续？','提交委托');await submitCase(row.id);ElMessage.success('已提交审核');load()}
 onMounted(load)
 </script>

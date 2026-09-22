@@ -66,6 +66,16 @@ public class CaseController {
         return ApiResponse.success(cases.assign(id,Input.id(body,"agentId"),(String)body.get("reason"),true));
     }
 
+    @PostMapping("/cases/{id}/collaborators")
+    public ApiResponse<?> addCollaborator(@PathVariable Long id, @RequestBody Map<String,Object> body) {
+        return ApiResponse.success(cases.addCollaborator(id, Input.id(body, "agentId"), (String) body.get("reason")));
+    }
+
+    @DeleteMapping("/cases/{id}/collaborators/{assignmentId}")
+    public ApiResponse<?> removeCollaborator(@PathVariable Long id, @PathVariable Long assignmentId) {
+        return ApiResponse.success(cases.removeCollaborator(id, assignmentId));
+    }
+
     @GetMapping("/cases/{id}/parties")
     public ApiResponse<?> parties(@PathVariable Long id,
             @RequestParam(defaultValue="1") long pageNum,

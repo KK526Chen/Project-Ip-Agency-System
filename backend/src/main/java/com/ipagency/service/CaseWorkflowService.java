@@ -19,8 +19,13 @@ public class CaseWorkflowService {
     private final Input input;
     private final ObjectMapper json;
     private final BusinessEvents events;
-    public CaseWorkflowService(V2Store db, CaseAccessServiceImpl access, Input input, ObjectMapper json, BusinessEvents events) {
+    private final CaseStatusFacade statusFacade;
+    private final DomainEventPublisher publisher;
+    private final org.springframework.context.ApplicationContext context;
+    public CaseWorkflowService(V2Store db, CaseAccessServiceImpl access, Input input, ObjectMapper json, BusinessEvents events,
+            CaseStatusFacade statusFacade, DomainEventPublisher publisher, org.springframework.context.ApplicationContext context) {
         this.db = db; this.access = access; this.input = input; this.json = json; this.events = events;
+        this.statusFacade = statusFacade; this.publisher = publisher; this.context = context;
     }
     public PageResult<CaseInfo> list(long page, long size, String status, String caseType, String keyword) {
         var q = access.scope(new QueryWrapper<CaseInfo>(), "id", true);
@@ -47,8 +52,11 @@ public class CaseWorkflowService {
         Map<String, Object> fields = new LinkedHashMap<>(body);
         Object parties = fields.remove("parties"), priorities = fields.remove("priorities");
         input.apply(fields, c, "caseName serviceProductId caseType technicalField priorityLevel confidentialReview description");
-        if (c.getServiceProductId() != null && !Integer.valueOf(1).equals(db.get(ServiceProduct.class, c.getServiceProductId()).getStatus()))
-            throw new BusinessException("服务已下架");
+        if (c.getServiceProductId() != null) {
+            ServiceProduct product = db.one(ServiceProduct.class, new QueryWrapper<ServiceProduct>().eq("id", c.getServiceProductId()));
+            if (product == null) throw new BusinessException("服务产品不存在，请选择 1 发明专利 / 2 商标 / 3 软著，或留空");
+            if (!Integer.valueOf(1).equals(product.getStatus())) throw new BusinessException("服务已下架");
+        }
         if (id == null) db.insert(c); else db.update(c);
         if (parties != null) saveParties(c.getId(), parties);
         if (priorities != null) savePriorities(c.getId(), priorities);
@@ -86,7 +94,9 @@ public class CaseWorkflowService {
         CaseInfo c = db.lock(CaseInfo.class, id); state(c.getStatus(), "SUBMITTED", "RETURNED");
         if (db.count(CaseParty.class, new QueryWrapper<CaseParty>().eq("case_id", id).eq("party_type", "APPLICANT")) == 0)
             throw new BusinessException("提交前请填写至少一名申请人");
-        c.setStatus("PENDING_REVIEW"); c.setSubmitTime(LocalDateTime.now()); c.setCurrentStage("委托提交"); db.update(c);
+        c.setSubmitTime(LocalDateTime.now());
+        statusFacade.transition(c, "PENDING_REVIEW");
+        statusFacade.setCurrentStage(c, "委托提交");
         stageEvent(id, "SUBMISSION", "委托提交", "COMPLETED");
         events.caseEvent(id, "CASE_STATUS", "案件已提交审核"); events.audit("SUBMIT_CASE", "CASE", id); return c;
     }
@@ -104,11 +114,13 @@ public class CaseWorkflowService {
         String result = Input.text(body, "reviewResult"); state(result, "APPROVED", "RETURNED", "REJECTED");
         ReviewRecord r = record(caseId, "CASE", caseId, "CASE_ACCEPTANCE", result, (String)body.get("reviewComment"));
         if ("APPROVED".equals(result)) {
-            c.setStatus("PENDING_ASSIGNMENT"); c.setAcceptTime(LocalDateTime.now());
+            c.setAcceptTime(LocalDateTime.now());
             if (c.getCaseNo() == null) c.setCaseNo("IP-" + LocalDateTime.now().getYear() + "-" + c.getId());
-            c.setCurrentStage("受理"); stageEvent(caseId, "ACCEPTANCE", "受理", "COMPLETED");
-        } else c.setStatus("RETURNED");
-        db.update(c); events.caseEvent(caseId, "CASE_STATUS", "案件审核结果: " + result);
+            statusFacade.transition(c, "PENDING_ASSIGNMENT");
+            statusFacade.setCurrentStage(c, "受理");
+            stageEvent(caseId, "ACCEPTANCE", "受理", "COMPLETED");
+        } else statusFacade.transition(c, "RETURNED");
+        events.caseEvent(caseId, "CASE_STATUS", "案件审核结果: " + result);
         events.audit("APPROVED".equals(result) ? "APPROVE_CASE" : "RETURN_CASE", "CASE", caseId); return r;
     }
     public ReviewRecord record(Long caseId, String target, Long targetId, String type, String result, String comment) {
@@ -131,11 +143,43 @@ public class CaseWorkflowService {
             .eq("assignment_role", "PRINCIPAL").eq("is_current", 1).set("is_current", 0).set("end_time", LocalDateTime.now()));
         CaseAssignment a = new CaseAssignment(); a.setCaseId(id); a.setAgentId(agentId); a.setAssignedByUserId(CurrentUserContext.require().userId());
         a.setAssignmentRole("PRINCIPAL"); a.setAssignTime(LocalDateTime.now()); a.setIsCurrent(1); a.setReason(reason); db.insert(a);
-        c.setPrincipalAgentId(agentId); if (!reassign) c.setStatus("PROCESSING"); db.update(c);
-        // Move open principal tasks with the case; completed task history is retained.
+        statusFacade.setPrincipalAgent(c, agentId);
+        if (!reassign) statusFacade.transition(c, "PROCESSING");
         db.mapper(DeadlineTask.class).update(null, new UpdateWrapper<DeadlineTask>().eq("case_id", id).ne("status", "COMPLETED")
             .and(q -> q.isNull("agent_id").or(previousAgentId != null).eq(previousAgentId != null, "agent_id", previousAgentId)).set("agent_id", agentId));
-        events.caseEvent(id, "CASE_STATUS", "案件已分配代理人"); events.audit(reassign ? "REASSIGN_AGENT" : "ASSIGN_AGENT", "CASE", id); return a;
+        try { context.getBean(WorkItemService.class).transferFollowPrincipal(id, previousAgentId, agentId); }
+        catch (Exception ignored) { /* work_item 表未迁移时不影响 V2 分配链 */ }
+        events.caseEvent(id, "CASE_STATUS", "案件已分配代理人");
+        events.audit(reassign ? "REASSIGN_AGENT" : "ASSIGN_AGENT", "CASE", id);
+        publisher.publish(reassign ? "CASE_REASSIGNED" : "CASE_ASSIGNED", id, a.getId(), "案件已分配代理人");
+        if (!reassign) try { context.getBean(WorkflowService.class).startIfAbsent(id, c.getCaseType()); }
+        catch (Exception ignored) { }
+        return a;
+    }
+    @Transactional
+    public CaseAssignment addCollaborator(Long caseId, Long agentId, String reason) {
+        CaseInfo c = statusFacade.lock(caseId);
+        var user = CurrentUserContext.require();
+        boolean principal = "AGENT".equals(user.role()) && Objects.equals(c.getPrincipalAgentId(), access.agent().getId());
+        if (!user.isAdmin() && !principal) CaseAccessServiceImpl.denied();
+        AgentProfile agent = db.get(AgentProfile.class, agentId);
+        SysUser u = db.get(SysUser.class, agent.getUserId());
+        if (!"AGENT".equals(u.getRole()) || !Integer.valueOf(1).equals(u.getStatus())) throw new BusinessException("代理人不可用");
+        if (Objects.equals(c.getPrincipalAgentId(), agentId)) throw new BusinessException("ASSIGNMENT_DUPLICATE: 主办人无需再添加为协办");
+        if (db.count(CaseAssignment.class, new QueryWrapper<CaseAssignment>().eq("case_id", caseId).eq("agent_id", agentId).eq("is_current", 1)) > 0)
+            throw new BusinessException("ASSIGNMENT_DUPLICATE: 该代理人已在当前分配中");
+        CaseAssignment a = new CaseAssignment(); a.setCaseId(caseId); a.setAgentId(agentId); a.setAssignedByUserId(user.userId());
+        a.setAssignmentRole("COLLABORATOR"); a.setAssignTime(LocalDateTime.now()); a.setIsCurrent(1); a.setReason(reason); db.insert(a);
+        events.caseEvent(caseId, "CASE_STATUS", "已添加协办代理人"); events.audit("ADD_COLLABORATOR", "CASE", caseId); return a;
+    }
+    @Transactional
+    public CaseAssignment removeCollaborator(Long caseId, Long assignmentId) {
+        statusFacade.lock(caseId); access.requireManage(caseId);
+        CaseAssignment a = db.lock(CaseAssignment.class, assignmentId);
+        if (!Objects.equals(a.getCaseId(), caseId) || !"COLLABORATOR".equals(a.getAssignmentRole())) CaseAccessServiceImpl.denied();
+        if (!Integer.valueOf(1).equals(a.getIsCurrent())) throw new BusinessException("协办分配已结束");
+        a.setIsCurrent(0); a.setEndTime(LocalDateTime.now()); db.update(a);
+        events.audit("REMOVE_COLLABORATOR", "CASE", caseId); return a;
     }
     @Transactional
     public CaseStage stage(Long caseId, Long stageId, Map<String, Object> body) {
@@ -149,10 +193,16 @@ public class CaseWorkflowService {
         if ("COMPLETED".equals(s.getStatus()) && s.getEndTime() == null) s.setEndTime(LocalDateTime.now());
         if (s.getEndTime() != null && s.getEndTime().isBefore(s.getStartTime())) throw new BusinessException("阶段结束时间早于开始时间");
         if (stageId == null) db.insert(s); else db.update(s);
-        c.setCurrentStage(s.getStageName());
+        statusFacade.setCurrentStage(c, s.getStageName());
         String next = Map.of("PRELIMINARY_EXAM", "FORMAL_EXAM", "SUBSTANTIVE_EXAM", "SUBSTANTIVE_EXAM", "GRANT", "GRANTED", "CERTIFICATE", "CLOSED").get(s.getStageType());
-        state(c.getStatus(), "PROCESSING", "FORMAL_EXAM", "SUBSTANTIVE_EXAM", "PRELIMINARY_PASSED", "GRANTED", "REEXAMINATION");
-        if (next != null) c.setStatus(next);
-        db.update(c); events.caseEvent(caseId, "CASE_STATUS", "案件阶段更新: " + s.getStageName()); events.audit("UPDATE_STAGE", "CASE", caseId); return s;
+        boolean engine = false;
+        try { engine = context.getBean(WorkflowService.class).hasInstance(caseId); } catch (Exception ignored) { }
+        if (!engine) {
+            state(c.getStatus(), "PROCESSING", "FORMAL_EXAM", "SUBSTANTIVE_EXAM", "PRELIMINARY_PASSED", "GRANTED", "REEXAMINATION");
+            if (next != null) statusFacade.transition(c, next);
+        }
+        events.caseEvent(caseId, "CASE_STATUS", "案件阶段更新: " + s.getStageName()); events.audit("UPDATE_STAGE", "CASE", caseId);
+        publisher.publish("CASE_STAGE_CHANGED", caseId, s.getId(), s.getStageName());
+        return s;
     }
 }
