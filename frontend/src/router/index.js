@@ -25,6 +25,9 @@ const roleRoutes = (role) => {
     { path: 'profile', component: page('profile/ProfileView'), meta: { title: '个人资料' } },
     { path: 'deadlines', component: page('shared/DeadlineView'), meta: { title: '我的时限' } },
     { path: 'documents', component: page('shared/DocumentView'), meta: { title: '业务文件' } },
+    { path: 'work-items', component: page('agent/WorkItemListView'), meta: { title: '工作项' } },
+    { path: 'timesheets', component: page('agent/TimesheetView'), meta: { title: '工时填报' } },
+    { path: 'risks', component: page('agent/RiskView'), meta: { title: '风险中心' } },
     { path: 'performance', component: page('admin/StatisticsView'), meta: { title: '个人业绩' } },
   )
   if (role === 'ADMIN') common.push(
@@ -41,6 +44,11 @@ const roleRoutes = (role) => {
     { path: 'users', component: page('admin/UserView'), meta: { title: '用户管理' } },
     { path: 'statistics', component: page('admin/StatisticsView'), meta: { title: '业务统计' } },
     { path: 'external-sync', component: page('admin/ExternalSyncView'), meta: { title: '外部同步' } },
+    { path: 'workflow-definitions', component: page('admin/WorkflowView'), meta: { title: '流程定义' } },
+    { path: 'deadline-rules', component: page('admin/CalendarRuleView'), meta: { title: '时限规则' } },
+    { path: 'business-calendar', component: page('admin/BusinessCalendarView'), meta: { title: '工作日历' } },
+    { path: 'exceptions', component: page('admin/ExceptionView'), meta: { title: '执行异常' } },
+    { path: 'data-quality', component: page('admin/DataQualityView'), meta: { title: '数据质量' } },
   )
   return { path: `/${lower}`, component: MainLayout, meta: { role }, redirect: `/${lower}/dashboard`, children: common }
 }
