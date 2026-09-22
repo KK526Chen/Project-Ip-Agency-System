@@ -8,7 +8,11 @@ request.interceptors.request.use((config) => {
 })
 request.interceptors.response.use(
   (response) => response.config.responseType === 'blob' ? response : response.data,
-  (error) => {
+  async (error) => {
+    const data = error.response?.data
+    if (data instanceof Blob) {
+      try { error.response.data = JSON.parse(await data.text()) } catch { /* keep blob */ }
+    }
     const status = error.response?.status
     if (status === 401) {
       sessionStorage.removeItem('token'); sessionStorage.removeItem('user')
@@ -17,5 +21,9 @@ request.interceptors.response.use(
     return Promise.reject(error)
   },
 )
-export const messageOf = (error, fallback = '操作失败') => error.response?.data?.message || error.message || fallback
+export const messageOf = (error, fallback = '操作失败') => {
+  const data = error.response?.data
+  if (data && typeof data === 'object' && typeof data.message === 'string') return data.message
+  return error.message || fallback
+}
 export default request
