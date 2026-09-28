@@ -2,6 +2,7 @@ package com.ipagency.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.*;
 import java.time.*;
 import java.math.BigDecimal;
@@ -34,6 +35,9 @@ public class CaseInfo {
     private String applicationNo;
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long principalAgentId;
+    @TableField(exist = false)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String principalAgentName;
     @Size(max = 40)
     @Pattern(regexp = "SUBMITTED|PENDING_REVIEW|RETURNED|PENDING_ASSIGNMENT|PROCESSING|FORMAL_EXAM|SUBSTANTIVE_EXAM|PRELIMINARY_PASSED|GRANTED|REJECTED|REEXAMINATION|WITHDRAWN|EXPIRED|CLOSED")
     private String status;
