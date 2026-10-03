@@ -27,7 +27,7 @@ public class PublicContentService {
         }
         String name = type == ServiceProduct.class ? "service_name" : type == SuccessCase.class ? "case_name" : "title";
         q.like(keyword != null && !keyword.isBlank(), name, keyword)
-            .eq(category != null, type == Announcement.class ? "announcement_type" : "service_type", category);
+            .eq(category != null && !category.isBlank(), type == Announcement.class ? "announcement_type" : "service_type", category);
         if (type == Announcement.class) q.orderByDesc("is_top", "publish_time");
         return q.orderByDesc("id");
     }
@@ -57,7 +57,8 @@ public class PublicContentService {
             if (a.getStartDate() != null && a.getEndDate() != null && a.getEndDate().isBefore(a.getStartDate())) throw new BusinessException("公告日期范围无效");
         }
         if (id == null) db.insert(value); else db.update(value);
-        events.audit("SAVE_CONTENT", type.getSimpleName(), id); return value;
+        Long savedId = (Long) new org.springframework.beans.BeanWrapperImpl(value).getPropertyValue("id");
+        events.audit("SAVE_CONTENT", type.getSimpleName(), savedId); return value;
     }
     @Transactional public <T> void delete(Class<T> type, Long id) {
         role("ADMIN"); db.get(type, id); db.mapper(type).deleteById(id); events.audit("DELETE_CONTENT", type.getSimpleName(), id);

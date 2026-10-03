@@ -38,6 +38,7 @@ public class ClientProfile {
     private String primaryContactPhone;
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     @Size(max = 100)
+    @Email(message = "联系邮箱格式不正确")
     private String primaryContactEmail;
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     @Size(max = 100)

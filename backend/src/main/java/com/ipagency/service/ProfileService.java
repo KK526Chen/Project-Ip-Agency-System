@@ -19,7 +19,15 @@ public class ProfileService {
     public ProfileService(V2Store db, CaseAccessServiceImpl access, Input input, BusinessEvents events) {
         this.db = db; this.access = access; this.input = input; this.events = events;
     }
-    public ClientProfile client() { return access.client(); }
+    public ClientProfile client() {
+        role("CLIENT");
+        Long userId = CurrentUserContext.require().userId();
+        ClientProfile p = db.one(ClientProfile.class, new QueryWrapper<ClientProfile>().eq("user_id", userId));
+        if (p == null) {
+            p = new ClientProfile(); p.setUserId(userId); p.setClientType("INDIVIDUAL");
+        }
+        return p;
+    }
     public AgentProfile agent() { return access.agent(); }
     @Transactional
     public ClientProfile saveClient(Map<String, Object> body) {

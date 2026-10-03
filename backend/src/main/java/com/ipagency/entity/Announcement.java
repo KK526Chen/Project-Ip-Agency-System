@@ -23,6 +23,7 @@ public class Announcement {
     @Pattern(regexp = "POLICY|BUSINESS|PROMOTION|RECRUITMENT|SYSTEM|TRAINING")
     private String announcementType;
     @Size(max = 50)
+    @Pattern(regexp = "ALL|CLIENT|AGENT|ADMIN")
     private String targetScope;
     @NotBlank
     private String content;
