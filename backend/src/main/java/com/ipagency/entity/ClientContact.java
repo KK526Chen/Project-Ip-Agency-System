@@ -25,6 +25,7 @@ public class ClientContact {
     private String phone;
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     @Size(max = 100)
+    @Email(message = "联系人邮箱格式不正确")
     private String email;
     @Size(max = 30)
     @Pattern(regexp = "ALL_CASES|SPECIFIED_CASES|FEE_ONLY")

@@ -20,6 +20,7 @@ public class SuccessCase {
     private String caseName;
     @NotBlank
     @Size(max = 40)
+    @Pattern(regexp = "PATENT_APPLICATION|TRADEMARK_REGISTRATION|COPYRIGHT_REGISTRATION|IP_STANDARD|IP_PROTECTION|PATENT_ANALYSIS")
     private String serviceType;
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     @Size(max = 100)
