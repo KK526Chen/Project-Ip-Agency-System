@@ -31,9 +31,32 @@ public class CaseWorkflowService {
         var q = access.scope(new QueryWrapper<CaseInfo>(), "id", true);
         q.eq(status != null, "status", status).eq(caseType != null, "case_type", caseType)
             .like(keyword != null && !keyword.isBlank(), "case_name", keyword).orderByDesc("create_time", "id");
-        return db.page(CaseInfo.class, q, page, size);
+        PageResult<CaseInfo> result = db.page(CaseInfo.class, q, page, size);
+        attachAgentNames(result.list());
+        return result;
     }
-    public CaseInfo detail(Long id) { access.requireView(id); return db.get(CaseInfo.class, id); }
+    private void attachAgentNames(List<CaseInfo> cases) {
+        Set<Long> agentIds = new HashSet<>();
+        for (CaseInfo item : cases) if (item.getPrincipalAgentId() != null) agentIds.add(item.getPrincipalAgentId());
+        if (agentIds.isEmpty()) return;
+        List<AgentProfile> agents = db.mapper(AgentProfile.class).selectList(new QueryWrapper<AgentProfile>().in("id", agentIds));
+        Set<Long> userIds = new HashSet<>();
+        Map<Long, Long> userByAgent = new HashMap<>();
+        for (AgentProfile agent : agents) { userByAgent.put(agent.getId(), agent.getUserId()); userIds.add(agent.getUserId()); }
+        if (userIds.isEmpty()) return;
+        Map<Long, String> names = new HashMap<>();
+        for (SysUser user : db.mapper(SysUser.class).selectList(new QueryWrapper<SysUser>().in("id", userIds))) names.put(user.getId(), user.getRealName());
+        for (CaseInfo item : cases) {
+            Long userId = userByAgent.get(item.getPrincipalAgentId());
+            if (userId != null && names.get(userId) != null && !names.get(userId).isBlank()) item.setPrincipalAgentName(names.get(userId));
+        }
+    }
+    public CaseInfo detail(Long id) {
+        access.requireView(id);
+        CaseInfo info = db.get(CaseInfo.class, id);
+        attachAgentNames(List.of(info));
+        return info;
+    }
     public <T> PageResult<T> children(Class<T> type, Long id, long page, long size, String order) {
         access.requireView(id);
         return db.page(type, new QueryWrapper<T>().eq("case_id", id).orderByAsc(order, "id"), page, size);
@@ -56,6 +79,7 @@ public class CaseWorkflowService {
             ServiceProduct product = db.one(ServiceProduct.class, new QueryWrapper<ServiceProduct>().eq("id", c.getServiceProductId()));
             if (product == null) throw new BusinessException("服务产品不存在，请选择 1 发明专利 / 2 商标 / 3 软著，或留空");
             if (!Integer.valueOf(1).equals(product.getStatus())) throw new BusinessException("服务已下架");
+            CaseCommissionRules.assertServiceMatches(product.getServiceType(), c.getCaseType());
         }
         if (id == null) db.insert(c); else db.update(c);
         if (parties != null) saveParties(c.getId(), parties);
@@ -69,11 +93,17 @@ public class CaseWorkflowService {
         catch (Exception e) { throw new BusinessException("明细格式不正确"); }
     }
     private void saveParties(Long id, Object value) {
-        db.mapper(CaseParty.class).delete(new QueryWrapper<CaseParty>().eq("case_id", id));
+        List<CaseParty> parsed = new ArrayList<>();
         for (var row : rows(value)) {
             CaseParty p = new CaseParty(); p.setCaseId(id); p.setIsPrimary(0);
-            input.apply(row, p, "partyType name idNo nationality address isPrimary remark"); db.insert(p);
+            input.apply(row, p, "partyType name idNo nationality address isPrimary remark");
+            if (p.getName() == null || p.getName().isBlank()) throw new BusinessException("当事人姓名不能为空");
+            p.setName(p.getName().trim());
+            parsed.add(p);
         }
+        CaseCommissionRules.assertPrimaryUnique(parsed);
+        db.mapper(CaseParty.class).delete(new QueryWrapper<CaseParty>().eq("case_id", id));
+        for (CaseParty p : parsed) db.insert(p);
     }
     private void savePriorities(Long id, Object value) {
         // The unique key includes logically deleted records: revive existing priorities instead of duplicating them.
@@ -81,7 +111,10 @@ public class CaseWorkflowService {
         var mapper = (com.ipagency.mapper.CasePriorityMapper) db.mapper(CasePriority.class);
         for (var row : rows(value)) {
             CasePriority p = new CasePriority(); p.setCaseId(id);
-            input.apply(row, p, "country priorityNo priorityDate"); db.validate(p);
+            input.apply(row, p, "country priorityNo priorityDate");
+            if (p.getCountry() != null) p.setCountry(p.getCountry().trim());
+            if (p.getPriorityNo() != null) p.setPriorityNo(p.getPriorityNo().trim());
+            db.validate(p);
             if (!numbers.add(p.getPriorityNo())) throw new BusinessException("优先权号重复");
             var old = mapper.findIncludingDeleted(id, p.getPriorityNo());
             if (old == null) db.insert(p); else { p.setId(old.getId()); mapper.restore(p); }
@@ -92,12 +125,12 @@ public class CaseWorkflowService {
     public CaseInfo submit(Long id) {
         role("CLIENT"); access.requireView(id);
         CaseInfo c = db.lock(CaseInfo.class, id); state(c.getStatus(), "SUBMITTED", "RETURNED");
-        if (db.count(CaseParty.class, new QueryWrapper<CaseParty>().eq("case_id", id).eq("party_type", "APPLICANT")) == 0)
-            throw new BusinessException("提交前请填写至少一名申请人");
+        CaseCommissionRules.assertReadyToSubmit(c, db.mapper(CaseParty.class).selectList(new QueryWrapper<CaseParty>().eq("case_id", id)));
         c.setSubmitTime(LocalDateTime.now());
         statusFacade.transition(c, "PENDING_REVIEW");
         statusFacade.setCurrentStage(c, "委托提交");
-        stageEvent(id, "SUBMISSION", "委托提交", "COMPLETED");
+        if (db.count(CaseStage.class, new QueryWrapper<CaseStage>().eq("case_id", id).eq("stage_type", "SUBMISSION")) == 0)
+            stageEvent(id, "SUBMISSION", "委托提交", "COMPLETED");
         events.caseEvent(id, "CASE_STATUS", "案件已提交审核"); events.audit("SUBMIT_CASE", "CASE", id); return c;
     }
     public CaseStage stageEvent(Long id, String type, String name, String status) {

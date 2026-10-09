@@ -98,7 +98,10 @@ class V2IntegrationTest {
     @Test void completeBusinessWorkflowPersistsRowsAndHistory() throws Exception {
         as("client_huawei");
         var c = cases.save(null, Map.of("caseName", "V2 transactional integration", "caseType", "INVENTION_PATENT",
-            "parties", List.of(Map.of("partyType", "APPLICANT", "name", "Test applicant")),
+            "serviceProductId", 1, "technicalField", "G06N",
+            "parties", List.of(
+                Map.of("partyType", "APPLICANT", "name", "Test applicant", "isPrimary", 1),
+                Map.of("partyType", "INVENTOR", "name", "Test inventor", "isPrimary", 1)),
             "priorities", List.of(Map.of("country", "CN", "priorityNo", "TEST-" + UUID.randomUUID(), "priorityDate", "2026-01-01"))));
         assertThat(c.getClientId()).isEqualTo(access.client().getId());
         assertThat(c.getCreateTime()).isNotNull();
